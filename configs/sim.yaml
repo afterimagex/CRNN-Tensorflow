@@ -1,0 +1,32 @@
+NUM_GPUS: 2
+HOSTS: [0, 1]
+RESTORE: True
+ENABLE_TENSOR_BOARD: True
+EXP_DIR: '/home/code/xupeichao/DATA/crnnTest/output'
+CHARACTER_TXT: '/home/code/xupeichao/DATA/crnnTest/character.txt'
+MODEL:
+  BACKBONE: 'mobilnet'
+  CLASSES: []
+  NUM_CLASSES: 78
+SOLVER:
+  BASE_LR: 0.001
+  END_LR: 0.0001
+  WARM_UP_FACTOR: 0.0
+  WEIGHT_DECAY: 0.00002
+  MOVING_AVERAGE_DECAY: 0.997
+  USE_MOVING_AVERAGE_DECAY: False
+  LR_POLICY: 'polynomial_decay'
+  OPT_POLICY: 'momentum'
+  STEP_SIZE: 40000
+  MAX_ITERS: 120000
+  SNAPSHOT_ITERS: 1000
+TRAIN:
+  EPOCH: 10
+  THREADS: 10
+  WEIGHTS: ''
+  DATABASE: '/home/code/xupeichao/DATA/crnnTest'
+  BATCH_SIZE: 24
+TEST:
+  VIS: True
+  BATCH_SIZE: 12
+  DATABASE: '/home/code/xupeichao/DATA/crnnTest'
