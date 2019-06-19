@@ -86,17 +86,33 @@ class TextFeatureReader(object):
         return [os.path.join(fdir, f) for f in os.listdir(fdir) if f.endswith(endswith) and patterns in f]
 
 
+    def batch(self):
+        dataset = tf.data.TFRecordDataset(self._tfrecords_files_path)
+        dataset = dataset.shuffle(buffer_size=24)
+        dataset = dataset.map(self._parse_single_example, num_parallel_calls=10)
+        dataset = dataset.prefetch(buffer_size=10)
+        dataset = dataset.padded_batch(batch_size=12, padded_shapes=([32, None, 3], [None], []))
+        dataset = dataset.repeat(1)
+        return dataset.make_initializable_iterator().get_next()
+
+
 if __name__ == "__main__":
+    import os
+
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 
     import matplotlib.pyplot as plt
-    tfr = TextFeatureReader(tfrecords_dir='D:/DATA/tftest',
+    tfr = TextFeatureReader(tfrecords_dir='/home/code/xupeichao/DATA/crnnTest',
                             prefix='train',
                             augment_online=False)
 
-    batch_images, batch_labels, batch_widths = tfr.read_with_bucket_queue(batch_size=8,
-                                                                          num_threads=10,
-                                                                          num_epochs=10,
-                                                                          shuffle=True)
+    # batch_images, batch_labels, batch_widths = tfr.read_with_bucket_queue(batch_size=8,
+    #                                                                       num_threads=10,
+    #                                                                       num_epochs=10,
+    #                                                                       shuffle=True)
+
+    batch_images, batch_labels, batch_widths = tfr.batch()
 
     with tf.Session() as sess:
         sess.run(tf.local_variables_initializer())

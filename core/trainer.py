@@ -74,14 +74,18 @@ class TrainWrapper(object):
                 num_epochs=cfg.TRAIN.EPOCH,
                 shuffle=cfg.TRAIN.USE_SHUFFLE)
 
-            if cfg.NUM_GPUS > 1:
-                images_sp = tf.split(input_images, cfg.NUM_GPUS)
-                labels_sp = tf.sparse_split(sp_input=input_labels, num_split=cfg.NUM_GPUS, axis=0)
-                widths_sp = tf.split(input_widths, cfg.NUM_GPUS)
-            else:
-                images_sp = [input_images]
-                labels_sp = [input_labels]
-                widths_sp = [input_widths]
+            images_sp = tf.split(input_images, cfg.NUM_GPUS)
+            labels_sp = tf.sparse_split(sp_input=input_labels, num_split=cfg.NUM_GPUS, axis=0)
+            widths_sp = tf.split(input_widths, cfg.NUM_GPUS)
+
+            # if cfg.NUM_GPUS > 1:
+            #     images_sp = tf.split(input_images, cfg.NUM_GPUS)
+            #     labels_sp = tf.sparse_split(sp_input=input_labels, num_split=cfg.NUM_GPUS, axis=0)
+            #     widths_sp = tf.split(input_widths, cfg.NUM_GPUS)
+            # else:
+            #     images_sp = [input_images]
+            #     labels_sp = [input_labels]
+            #     widths_sp = [input_widths]
 
             tower_grads = []
             tower_distance = []
@@ -168,8 +172,11 @@ class TrainWrapper(object):
                         saver.save(sess, os.path.join(self.output_dir, 'model.ckpt'),
                                    global_step=self.solver.global_step)
 
+                    if step >= cfg.SOLVER.MAX_ITERS:
+                        break
+
             except tf.errors.OutOfRangeError:
-                logger.error('Epochs Complete!')
+                logger.info('Epochs Complete!')
             finally:
                 coord.request_stop()
             coord.join(threads)
