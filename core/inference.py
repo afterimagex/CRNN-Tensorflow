@@ -13,6 +13,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import cv2
+import numpy as np
 import tensorflow as tf
 from core.config import cfg
 from models import get_models
@@ -79,5 +81,60 @@ class TestServer(object):
 
 
 class InferServer(object):
-    def __init__(self, coordinator, data_loader):
-        self.images_dir = cfg.TEST.DATABASE
+    def __init__(self, coordinator, images_dir, **kwargs):
+        self.images_dir = images_dir
+        self.output_dir = coordinator.checkpoints_dir()
+        self.decoder = Character().from_txt(cfg.CHARACTER_TXT)
+
+        self._allow_soft_placement = kwargs.get('allow_soft_placement', True)
+        self._log_device_placement = kwargs.get('log_device_placenebt', False)
+        self.device = kwargs.get('device', '/cpu:0')
+        self.model_path = kwargs.get('model_path', None)
+
+        self.graph = tf.Graph()
+        self.sess = tf.Session(graph=self.graph, config=tf.ConfigProto(allow_soft_placement=self._allow_soft_placement,
+                                                                       log_device_placement=self._log_device_placement))
+
+        self.model = self._load_weights(self.model_path)
+
+    def _load_weights(self, weights=None):
+        with self.graph.as_default():
+            with tf.device(self.device):
+                input_images = tf.placeholder(tf.uint8, shape=[None, 32, None, 3], name='input_images')
+                input_widths = tf.placeholder(tf.uint8, shape=[None], name='input_widths')
+
+                with tf.device('/gpu:0'):
+                    logits = get_models(cfg.MODEL.BACKBONE)(cfg.MODEL.NUM_CLASSES).build(input_images, False)
+                    seqlen = tf.cast(tf.floor_div(input_widths, 2), tf.int32, name='sequence_length')
+
+                    softmax = tf.nn.softmax(logits, dim=-1, name='softmax')
+                    decoded, log_prob = tf.nn.ctc_greedy_decoder(softmax, seqlen)
+                    prob = -tf.divide(tf.cast(log_prob, tf.int32), seqlen[0])
+
+            saver = tf.train.Saver(tf.global_variables())
+            if weights is None:
+                saver.restore(self.sess, tf.train.latest_checkpoint(self.output_dir))
+            else:
+                saver.restore(self.sess, weights)
+
+        return {'input_images': input_images, 'input_widths': input_widths, 'decoded': decoded, 'prob': prob}
+
+    @staticmethod
+    def resize_images_and_pad(images):
+        ws = list(map(lambda x: int(np.ceil(32.0 * x.shape[1] / x.shape[0])), images))
+        wmax = max(ws)
+        wmax = wmax if wmax % 32 == 0 else (wmax // 32 + 1) * 32
+        data = np.zeros(shape=(len(ws), 32, wmax, 3), dtype=np.uint8)
+        for i, img in enumerate(images):
+            tmp = cv2.resize(img, (ws[i], 32))
+            data[i, :32, : ws[i], :] = tmp
+        length = np.array([wmax], dtype=np.int32).repeat(len(ws))
+        return data, length
+
+    def predict(self, images):
+        imgs, widths = self.resize_images_and_pad(images)
+        output, prob = self.sess.run([self.model['decoded'], self.model['prob']],
+                                     feed_dict={self.model['input_images']: imgs,
+                                                self.model['input_widths']: widths})
+        context = self.decoder.sparse_to_strlist(output.indices, output.values, len(imgs))
+        return context, prob.reshape(-1)
